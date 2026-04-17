@@ -1,0 +1,11 @@
+{
+    "welcome_message": "Hello! I am your personnal familiar and will store any reminders you give me. \n Type /help to see the list of available commands or simply type /newreminder to write down an event you have to be reminded of!",
+    "helper_message": "The available commands are: \n /start \n /help \n /language, /lang \n /newreminder \n /removereminder \n /updatereminder \n /me",
+    "username_query": "Hi, your name is {username}!",
+    "unknown_user": "It looks like I don't know you yet... Try typing /start to begin!",
+    "ask_reminder": "Please tell me what you want to be reminded of!",
+    "reminder_saved": "Reminder saved: {text}",
+    "error_saving": "Oops! Something went wrong while saving.",
+    "choose_language": "Please select your preferred language:",
+    "language_updated": "Language successfully updated to English!"
+}
