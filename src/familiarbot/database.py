@@ -137,7 +137,7 @@ def get_user_reminders(telegram_id):
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute('''
-        SELECT title, remind_at, notified 
+        SELECT id, title, remind_at, notified 
         FROM tasks 
         WHERE user_id = (SELECT id FROM users WHERE telegram_id = %s)
         ORDER BY remind_at ASC;
@@ -155,6 +155,14 @@ def update_timezone(telegram_id, timezone_str):
         SET timezone = %s
         WHERE telegram_id = %s;
     ''', (timezone_str, telegram_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def remove_reminder(task_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('DELETE FROM tasks WHERE id = %s;', (task_id,))
     conn.commit()
     cur.close()
     conn.close()

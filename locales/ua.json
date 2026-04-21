@@ -32,5 +32,8 @@
     "status_sent": "Відправлено",
     "status_pending": "Очікує",
     "reminder_item": "- {title}\n  Нагадати о: {time_str} [{status}]\n\n",
-    "language_changed_popup": "Мову змінено!"
+    "language_changed_popup": "Мову змінено!",
+    "choose_reminder_to_remove": "Оберіть замітку для видалення.",
+    "reminder_removed_popup": "Нагадування видалено!",
+    "reminder_removed_text": "Нагадування успішно видалено."
 }

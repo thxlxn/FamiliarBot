@@ -207,7 +207,7 @@ def handle_language_callback(call):
 
 def get_ai_reminder_text(username, title, notes, due_date, lang):
 
-    system_prompt = f"You are a helpful personal familiar. Your master, {username}, asked you to remind them of a task. Write a short, creative, and personalized reminder message. You MUST write the response in the language corresponding to this ISO code: {lang}. Do not use any markdown formatting like bolding or italics."
+    system_prompt = f"You are a helpful personal familiar. Your master, {username}, asked you to remind them of a task. Write a short, creative, and personalized reminder message. You MUST write the response in the language corresponding to this ISO code: {lang}. Always mention the date and time from {due_date}. Do not use any markdown formatting like bolding or italics."
     user_prompt = f"Task Title: {title}\nDue Date: {due_date}\nTask Notes: {notes}"
     
     try:
@@ -232,6 +232,7 @@ def check_and_send_reminders():
 
             bot.send_message(telegram_id, final_text)
             database.mark_reminder_notified(task_id)
+            database.remove_reminder(task_id) # | expand this later i guess |
             
         except Exception as e:
             print(f"Failed to send reminder to {telegram_id}: {e}")
@@ -248,13 +249,43 @@ def handle_myreminders(message):
         
     reply_text = get_text(lang, "your_reminders") + "\n\n"
     
-    for title, remind_at, notified in reminders:
+    for task_id, title, remind_at, notified in reminders:
         time_str = remind_at.strftime("%Y-%m-%d %H:%M")
         status_key = "status_sent" if notified else "status_pending"
         status_text = get_text(lang, status_key)
         reply_text += get_text(lang, "reminder_item", title=title, time_str=time_str, status=status_text)
         
     bot.reply_to(message, reply_text)
+
+@bot.message_handler(commands=['removereminder'])
+def handle_removereminder(message):
+    telegram_id = message.from_user.id
+    lang = database.get_user_language(telegram_id)
+    reminders = database.get_user_reminders(telegram_id)
+
+    if not reminders:
+        bot.reply_to(message, get_text(lang, "no_reminders"))
+        return
+    
+    reply_text = get_text(lang, "choose_reminder_to_remove")
+
+    markup = InlineKeyboardMarkup()
+    for task_id, title, remind_at, notified in reminders:
+        time_str = remind_at.strftime("%Y-%m-%d %H:%M")
+        status_key = "status_sent" if notified else "status_pending"
+        status_text = get_text(lang, status_key)
+        reminder = get_text(lang, "reminder_item", title=title, time_str=time_str, status=status_text)
+        markup.add(InlineKeyboardButton(f"{reminder}", callback_data=f"rm_task_{task_id}"))
+        
+    bot.send_message(message.chat.id, reply_text, reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('rm_task_'))
+def handle_remove_callback(call):
+    task_id = call.data.split('_')[2]
+    lang = database.get_user_language(call.from_user.id)
+    database.remove_reminder(task_id)
+    bot.answer_callback_query(call.id, text=get_text(lang, "reminder_removed_popup", default="Reminder removed!"))
+    bot.edit_message_text(chat_id=call.message.chat.id,message_id=call.message.message_id,text=get_text(lang, "reminder_removed_text", default="Reminder successfully removed."))
 
 def run_bot():
     database.setup_database()

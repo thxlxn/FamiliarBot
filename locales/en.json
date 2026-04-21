@@ -32,5 +32,8 @@
     "status_sent": "Sent",
     "status_pending": "Pending",
     "reminder_item": "- {title}\n  Remind at: {time_str} [{status}]\n\n",
-    "language_changed_popup": "Language changed!"
+    "language_changed_popup": "Language changed!",
+    "choose_reminder_to_remove": "Select a reminder to remove.",
+    "reminder_removed_popup": "Reminder removed!",
+    "reminder_removed_text": "Reminder successfully removed."
 }
