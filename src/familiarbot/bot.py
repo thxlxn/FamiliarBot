@@ -1,14 +1,22 @@
-import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-from telegram_bot_calendar import DetailedTelegramCalendar, LSTEP
-from src.familiarbot import database
-from src.familiarbot.config import TELEGRAM_KEY, GEMINI_KEY
-from src.familiarbot.i18n import get_text
-from apscheduler.schedulers.background import BackgroundScheduler
 import datetime
-from timezonefinder import TimezoneFinder
+
+import telebot
+from apscheduler.schedulers.background import BackgroundScheduler
 from google import genai
 from google.genai import types
+from telebot.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+)
+from telegram_bot_calendar import DetailedTelegramCalendar
+from timezonefinder import TimezoneFinder
+
+from src.familiarbot import database
+from src.familiarbot.config import GEMINI_KEY, TELEGRAM_KEY
+from src.familiarbot.i18n import get_text
 
 bot = telebot.TeleBot(TELEGRAM_KEY)
 user_states = {}
@@ -20,7 +28,7 @@ def handle_start(message):
     existing_lang = database.get_user_language(message.from_user.id)
     lang_code = message.from_user.language_code if existing_lang == 'en' else existing_lang
     database.add_user(message.from_user.id, message.from_user.username, lang_code)
-    
+
     reply = get_text(lang_code, "welcome_message")
     bot.send_message(message.chat.id, reply)
 
@@ -55,7 +63,7 @@ def process_timezone_setup(message, lang):
             "Asia/Dubai", "Asia/Karachi", "Asia/Dhaka", "Asia/Bangkok",
             "Asia/Singapore", "Asia/Tokyo", "Australia/Sydney", "Pacific/Auckland"
         ]
-        
+
         markup = InlineKeyboardMarkup()
         for i in range(0, len(timezones), 2):
             row = []
@@ -72,9 +80,9 @@ def handle_timezone_callback(call):
     selected_tz = call.data.replace('tz_', '')
     telegram_id = call.from_user.id
     lang = database.get_user_language(telegram_id)
-    
+
     database.update_timezone(telegram_id, selected_tz)
-    
+
     bot.answer_callback_query(call.id, text=get_text(lang, "timezone_set_success", timezone=selected_tz))
     bot.edit_message_text(
         chat_id=call.message.chat.id,
@@ -92,7 +100,7 @@ def handle_help(message):
 def handle_me_request(message):
     lang = database.get_user_language(message.from_user.id)
     username = database.get_username(message.from_user.id)
-    
+
     if username:
         bot.reply_to(message, get_text(lang, "username_query", username=username))
     else:
@@ -102,9 +110,9 @@ def handle_me_request(message):
 def handle_newreminder(message):
     lang = database.get_user_language(message.from_user.id)
     text = message.text.replace('/newreminder', '').strip()
-    
+
     user_states[message.from_user.id] = {}
-    
+
     if text:
         user_states[message.from_user.id]['title'] = text
         msg = bot.reply_to(message, get_text(lang, "ask_notes"))
@@ -126,7 +134,7 @@ def process_notes_step(message, lang):
         bot.reply_to(message, get_text(lang, "cancel_reminder"))
         return
     user_states[message.from_user.id]['notes'] = message.text.strip()
-    
+
     calendar, step = DetailedTelegramCalendar().build()
     bot.send_message(message.chat.id, get_text(lang, f"select_{step}"), reply_markup=calendar)
 
@@ -134,7 +142,7 @@ def process_notes_step(message, lang):
 def calendar_callback(call):
     lang = database.get_user_language(call.from_user.id)
     result, key, step = DetailedTelegramCalendar().process(call.data)
-    
+
     if not result and key:
         bot.edit_message_text(get_text(lang, f"select_{step}"),
                               call.message.chat.id,
@@ -188,7 +196,7 @@ def process_offset_step(message, lang):
 def handle_language(message):
     lang = database.get_user_language(message.from_user.id)
     text = get_text(lang, "choose_language")
-    
+
     markup = InlineKeyboardMarkup()
     markup.add(
         InlineKeyboardButton("🇬🇧 English", callback_data="lang_en"),
@@ -199,7 +207,7 @@ def handle_language(message):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('lang_'))
 def handle_language_callback(call):
-    new_lang = call.data.split('_')[1] 
+    new_lang = call.data.split('_')[1]
     telegram_id = call.from_user.id
     database.update_language(telegram_id, new_lang)
     bot.answer_callback_query(call.id, text=get_text(new_lang, "language_changed_popup"))
@@ -209,7 +217,7 @@ def get_ai_reminder_text(username, title, notes, due_date, lang):
 
     system_prompt = f"You are a helpful personal familiar. Your master, {username}, asked you to remind them of a task. Write a short, creative, and personalized reminder message. You MUST write the response in the language corresponding to this ISO code: {lang}. Always mention the date and time from {due_date}. Do not use any markdown formatting like bolding or italics."
     user_prompt = f"Task Title: {title}\nDue Date: {due_date}\nTask Notes: {notes}"
-    
+
     try:
         response = client.models.generate_content(model='gemini-2.5-flash-lite', config=types.GenerateContentConfig(system_instruction=system_prompt), contents=user_prompt)
         return response.text.strip()
@@ -219,21 +227,21 @@ def get_ai_reminder_text(username, title, notes, due_date, lang):
 
 def check_and_send_reminders():
     pending = database.get_pending_reminders()
-    
+
     for task in pending:
         task_id, telegram_id, title, notes, lang, due_date = task
         try:
             due_date_str = due_date.strftime("%Y-%m-%d %H:%M")
             username = database.get_username(telegram_id) or "Master"
             final_text = get_ai_reminder_text(username, title, notes, due_date_str, lang)
-            
+
             if not final_text:
                 final_text = get_text(lang, "reminder_sent", title=title, due_date=due_date_str, notes=notes)
 
             bot.send_message(telegram_id, final_text)
             database.mark_reminder_notified(task_id)
             database.remove_reminder(task_id) # | expand this later i guess |
-            
+
         except Exception as e:
             print(f"Failed to send reminder to {telegram_id}: {e}")
 
@@ -242,19 +250,19 @@ def handle_myreminders(message):
     telegram_id = message.from_user.id
     lang = database.get_user_language(telegram_id)
     reminders = database.get_user_reminders(telegram_id)
-    
+
     if not reminders:
         bot.reply_to(message, get_text(lang, "no_reminders"))
         return
-        
+
     reply_text = get_text(lang, "your_reminders") + "\n\n"
-    
+
     for task_id, title, remind_at, notified in reminders:
         time_str = remind_at.strftime("%Y-%m-%d %H:%M")
         status_key = "status_sent" if notified else "status_pending"
         status_text = get_text(lang, status_key)
         reply_text += get_text(lang, "reminder_item", title=title, time_str=time_str, status=status_text)
-        
+
     bot.reply_to(message, reply_text)
 
 @bot.message_handler(commands=['removereminder'])
@@ -266,7 +274,7 @@ def handle_removereminder(message):
     if not reminders:
         bot.reply_to(message, get_text(lang, "no_reminders"))
         return
-    
+
     reply_text = get_text(lang, "choose_reminder_to_remove")
 
     markup = InlineKeyboardMarkup()
@@ -276,7 +284,7 @@ def handle_removereminder(message):
         status_text = get_text(lang, status_key)
         reminder = get_text(lang, "reminder_item", title=title, time_str=time_str, status=status_text)
         markup.add(InlineKeyboardButton(f"{reminder}", callback_data=f"rm_task_{task_id}"))
-        
+
     bot.send_message(message.chat.id, reply_text, reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('rm_task_'))
@@ -292,6 +300,6 @@ def run_bot():
     scheduler = BackgroundScheduler()
     scheduler.add_job(check_and_send_reminders, 'interval', minutes=1)
     scheduler.start()
-    
+
     print("Bot is up and running...")
     bot.polling(non_stop=True, interval=0)

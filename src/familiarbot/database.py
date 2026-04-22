@@ -1,9 +1,11 @@
 import psycopg2
-from src.familiarbot.config import DB_NAME, DB_USERNAME, DB_PASSWORD, DB_HOST, DB_PORT
+
+from src.familiarbot.config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USERNAME
+
 
 def get_db_connection():
     return psycopg2.connect(
-        dbname=DB_NAME, user=DB_USERNAME, password=DB_PASSWORD, 
+        dbname=DB_NAME, user=DB_USERNAME, password=DB_PASSWORD,
         host=DB_HOST, port=DB_PORT
     )
 
@@ -35,7 +37,7 @@ def setup_database():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     ''')
-    
+
     conn.commit()
     cur.close()
     conn.close()
@@ -96,7 +98,7 @@ def get_username(telegram_id):
         return result[0]
     else:
         return None
-    
+
 def update_language(telegram_id, new_language):
     conn = get_db_connection()
     cur = conn.cursor()
