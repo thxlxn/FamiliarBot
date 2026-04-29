@@ -33,7 +33,12 @@
     "status_pending": "Ожидает",
     "reminder_item": "- {title}\n  Напомнить в: {time_str} [{status}]\n\n",
     "language_changed_popup": "Язык изменен!",
-    "choose_reminder_to_remove": "Выберите заметку для удаления.",
+    "choose_reminder_to_remove": "Выберите напоминание для удаления.",
     "reminder_removed_popup": "Напоминание удалено!",
-    "reminder_removed_text": "Напоминание успешно удалено."
+    "reminder_removed_text": "Напоминание успешно удалено.",
+    "choose_reminder_to_update": "Выберите напоминание для обновления.",
+    "btn_skip": "Пропустить ->",
+    "btn_yes": "Да",
+    "ask_update_datetime": "Вы хотите обновить дату и время?",
+    "reminder_updated": "Напоминание успешно обновлено!"
 }

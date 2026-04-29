@@ -163,8 +163,13 @@ def process_time_step(message, lang):
     try:
         time_obj = datetime.datetime.strptime(message.text.strip(), '%H:%M').time()
         user_states[message.from_user.id]['time'] = time_obj
-        msg = bot.reply_to(message, get_text(lang, "ask_offset"))
-        bot.register_next_step_handler(msg, process_offset_step, lang)
+        
+        state = user_states.get(message.from_user.id, {})
+        if state.get('update_mode'):
+            ask_upd_offset(message.chat.id, message.from_user.id, lang)
+        else:
+            msg = bot.reply_to(message, get_text(lang, "ask_offset"))
+            bot.register_next_step_handler(msg, process_offset_step, lang)
     except ValueError:
         msg = bot.reply_to(message, get_text(lang, "invalid_time"))
         bot.register_next_step_handler(msg, process_time_step, lang)
@@ -177,14 +182,24 @@ def process_offset_step(message, lang):
         offset_hours = float(message.text.strip())
         user_id = message.from_user.id
         state = user_states.get(user_id, {})
-        due_date = datetime.datetime.combine(state['date'], state['time'])
+        
+        if 'date' in state and 'time' in state:
+            due_date = datetime.datetime.combine(state['date'], state['time'])
+        else:
+            due_date = state['due_date']
+            
         remind_at = due_date - datetime.timedelta(hours=offset_hours)
 
-        database.add_task(user_id, state['title'], state['notes'], due_date, offset_hours, remind_at)
-        bot.reply_to(message, get_text(lang, "reminder_saved", text=state['title']))
+        if state.get('update_mode'):
+            database.update_task(state['task_id'], state['title'], state['notes'], due_date, offset_hours, remind_at)
+            bot.reply_to(message, get_text(lang, "reminder_updated"))
+        else:
+            database.add_task(user_id, state['title'], state['notes'], due_date, offset_hours, remind_at)
+            bot.reply_to(message, get_text(lang, "reminder_saved", text=state['title']))
 
         if user_id in user_states:
             del user_states[user_id]
+            
     except ValueError:
         msg = bot.reply_to(message, get_text(lang, "invalid_offset"))
         bot.register_next_step_handler(msg, process_offset_step, lang)
@@ -294,6 +309,140 @@ def handle_remove_callback(call):
     database.remove_reminder(task_id)
     bot.answer_callback_query(call.id, text=get_text(lang, "reminder_removed_popup", default="Reminder removed!"))
     bot.edit_message_text(chat_id=call.message.chat.id,message_id=call.message.message_id,text=get_text(lang, "reminder_removed_text", default="Reminder successfully removed."))
+
+@bot.message_handler(commands=['updatereminder'])
+def handle_updatereminder(message):
+    telegram_id = message.from_user.id
+    lang = database.get_user_language(telegram_id)
+    reminders = database.get_user_reminders(telegram_id)
+
+    if not reminders:
+        bot.reply_to(message, get_text(lang, "no_reminders"))
+        return
+    
+    reply_text = get_text(lang, "choose_reminder_to_update")
+
+    markup = InlineKeyboardMarkup()
+    for task_id, title, remind_at, notified in reminders:
+        time_str = remind_at.strftime("%Y-%m-%d %H:%M")
+        status_key = "status_sent" if notified else "status_pending"
+        status_text = get_text(lang, status_key)
+        reminder = get_text(lang, "reminder_item", title=title, time_str=time_str, status=status_text)
+        markup.add(InlineKeyboardButton(f"{reminder}", callback_data=f"upd_task_{task_id}"))
+
+    bot.send_message(message.chat.id, reply_text, reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('upd_task_'))
+def handle_update_callback(call):
+    task_id = call.data.split('_')[2]
+    lang = database.get_user_language(call.from_user.id)
+    
+    task_data = database.get_task(task_id)
+    if not task_data:
+        bot.answer_callback_query(call.id, text=get_text(lang, "error_saving"))
+        return
+
+    user_states[call.from_user.id] = {'update_mode': True, 'task_id': task_id, 'title': task_data[0], 'notes': task_data[1], 'due_date': task_data[2], 'offset_hours': task_data[3]}
+
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton(get_text(lang, "btn_skip"), callback_data="skip_upd_title"))
+    
+    msg = bot.edit_message_text(
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        text=get_text(lang, "ask_title"),
+        reply_markup=markup
+    )
+    bot.register_next_step_handler(msg, process_upd_title_step, lang)
+
+# | TITLE STEP |
+def process_upd_title_step(message, lang):
+    if message.text.startswith('/'):
+        bot.reply_to(message, get_text(lang, "cancel_reminder"))
+        return
+    user_states[message.from_user.id]['title'] = message.text.strip()
+    ask_upd_notes(message.chat.id, message.from_user.id, lang)
+
+@bot.callback_query_handler(func=lambda call: call.data == 'skip_upd_title')
+def handle_skip_upd_title(call):
+    lang = database.get_user_language(call.from_user.id)
+    bot.clear_step_handler_by_chat_id(call.message.chat.id) # Stops waiting for text
+    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None) 
+    ask_upd_notes(call.message.chat.id, call.from_user.id, lang)
+
+# | NOTES STEP |
+def ask_upd_notes(chat_id, user_id, lang):
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton(get_text(lang, "btn_skip"), callback_data="skip_upd_notes"))
+    msg = bot.send_message(chat_id, get_text(lang, "ask_notes"), reply_markup=markup)
+    bot.register_next_step_handler(msg, process_upd_notes_step, lang)
+
+def process_upd_notes_step(message, lang):
+    if message.text.startswith('/'):
+        bot.reply_to(message, get_text(lang, "cancel_reminder"))
+        return
+    user_states[message.from_user.id]['notes'] = message.text.strip()
+    ask_upd_datetime_choice(message.chat.id, message.from_user.id, lang)
+
+@bot.callback_query_handler(func=lambda call: call.data == 'skip_upd_notes')
+def handle_skip_upd_notes(call):
+    lang = database.get_user_language(call.from_user.id)
+    bot.clear_step_handler_by_chat_id(call.message.chat.id)
+    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+    ask_upd_datetime_choice(call.message.chat.id, call.from_user.id, lang)
+
+# | DATE STEP |
+def ask_upd_datetime_choice(chat_id, user_id, lang):
+    markup = InlineKeyboardMarkup()
+    markup.add(
+        InlineKeyboardButton(get_text(lang, "btn_yes"), callback_data="do_upd_datetime"),
+        InlineKeyboardButton(get_text(lang, "btn_skip"), callback_data="skip_upd_datetime")
+    )
+    bot.send_message(chat_id, get_text(lang, "ask_update_datetime"), reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data == 'do_upd_datetime')
+def handle_do_upd_datetime(call):
+    lang = database.get_user_language(call.from_user.id)
+    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+    
+    calendar, step = DetailedTelegramCalendar().build()
+    bot.send_message(call.message.chat.id, get_text(lang, f"select_{step}"), reply_markup=calendar)
+
+@bot.callback_query_handler(func=lambda call: call.data == 'skip_upd_datetime')
+def handle_skip_upd_datetime(call):
+    lang = database.get_user_language(call.from_user.id)
+    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+    ask_upd_offset(call.message.chat.id, call.from_user.id, lang)
+
+# | OFFSET STEP |
+def ask_upd_offset(chat_id, user_id, lang):
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton(get_text(lang, "btn_skip"), callback_data="skip_upd_offset"))
+    msg = bot.send_message(chat_id, get_text(lang, "ask_offset"), reply_markup=markup)
+    bot.register_next_step_handler(msg, process_offset_step, lang)
+
+@bot.callback_query_handler(func=lambda call: call.data == 'skip_upd_offset')
+def handle_skip_upd_offset(call):
+    user_id = call.from_user.id
+    lang = database.get_user_language(user_id)
+    bot.clear_step_handler_by_chat_id(call.message.chat.id)
+    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+
+    state = user_states.get(user_id, {})
+    if not state:
+        return
+
+    due_date = state.get('due_date')
+    if 'date' in state and 'time' in state: 
+        due_date = datetime.datetime.combine(state['date'], state['time'])
+
+    offset_hours = state['offset_hours']
+    remind_at = due_date - datetime.timedelta(hours=offset_hours)
+
+    database.update_task(state['task_id'], state['title'], state['notes'], due_date, offset_hours, remind_at)
+    bot.send_message(call.message.chat.id, get_text(lang, "reminder_updated"))
+    if user_id in user_states:
+        del user_states[user_id]
 
 def run_bot():
     database.setup_database()

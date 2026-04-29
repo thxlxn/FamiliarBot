@@ -168,3 +168,29 @@ def remove_reminder(task_id):
     conn.commit()
     cur.close()
     conn.close()
+
+def get_task(task_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT title, notes, due_date, reminder_offset_hours 
+        FROM tasks WHERE id = %s;
+    ''', (task_id,))
+    result = cur.fetchone()
+    cur.close()
+    conn.close()
+    return result
+
+def update_task(task_id, new_title, new_notes, new_due_date, new_offset_hours, new_remind_at):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute('''
+        UPDATE tasks 
+        SET (title, notes, due_date, reminder_offset_hours, remind_at) = (%s, %s, %s, %s, %s) 
+        WHERE id = %s;''', 
+        (new_title, new_notes, new_due_date, new_offset_hours, new_remind_at, task_id))
+
+    conn.commit()
+    cur.close()
+    conn.close()

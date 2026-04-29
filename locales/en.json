@@ -35,5 +35,10 @@
     "language_changed_popup": "Language changed!",
     "choose_reminder_to_remove": "Select a reminder to remove.",
     "reminder_removed_popup": "Reminder removed!",
-    "reminder_removed_text": "Reminder successfully removed."
+    "reminder_removed_text": "Reminder successfully removed.",
+    "choose_reminder_to_update": "Select a reminder to update.",
+    "btn_skip": "Skip ->",
+    "btn_yes": "Yes",
+    "ask_update_datetime": "Do you want to update the due date and time?",
+    "reminder_updated": "Reminder successfully updated!"
 }
