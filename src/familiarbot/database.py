@@ -194,3 +194,29 @@ def update_task(task_id, new_title, new_notes, new_due_date, new_offset_hours, n
     conn.commit()
     cur.close()
     conn.close()
+
+def exec_admin_cmd(cmd, params = None):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        if params:
+            cur.execute(cmd, params)
+        else:
+            cur.execute(cmd)
+
+        if cmd.strip().upper().startswith("SELECT"):
+            result = cur.fetchall()
+            conn.commit()
+            return result
+        else:
+            conn.commit()
+            return f"{cur.rowcount} rows affected."
+        
+    except Exception as e:
+        conn.rollback()
+        return f"Error: {e}"
+    
+    finally:
+        cur.close()
+        conn.close()

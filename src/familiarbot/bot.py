@@ -15,7 +15,7 @@ from telegram_bot_calendar import DetailedTelegramCalendar
 from timezonefinder import TimezoneFinder
 
 from src.familiarbot import database
-from src.familiarbot.config import GEMINI_KEY, TELEGRAM_KEY
+from src.familiarbot.config import GEMINI_KEY, TELEGRAM_KEY, ADMIN_PASS
 from src.familiarbot.i18n import get_text
 
 bot = telebot.TeleBot(TELEGRAM_KEY)
@@ -443,6 +443,30 @@ def handle_skip_upd_offset(call):
     bot.send_message(call.message.chat.id, get_text(lang, "reminder_updated"))
     if user_id in user_states:
         del user_states[user_id]
+
+@bot.message_handler(commands=['debug'])
+def handle_debug(message):
+    msg = bot.reply_to(message, "Enter the admin password:")
+    bot.register_next_step_handler(msg, verify_adm_pass)
+
+def verify_adm_pass(message):
+    if message.text == ADMIN_PASS:
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(KeyboardButton("Quit Debug Mode"))
+
+        msg = bot.send_message(message.chat.id, "Access granted. You are now in debug mode. \nEnter your raw SQL commands:", reply_markup=markup)
+        bot.register_next_step_handler(msg, debug_loop)
+    else:
+        bot.send_message(message.chat.id, "Nuh-uh.")
+
+def debug_loop(message):
+    if message.text == "Quit Debug Mode":
+        bot.send_message(message.chat.id, "Quit debug mode.", reply_markup=ReplyKeyboardRemove())
+        return
+    
+    result = database.exec_admin_cmd(message.text)
+    msg = bot.send_message(message.chat.id, f"Result:\n\```\n{result}\n```", parse_mode='Markdown')
+    bot.register_next_step_handler(msg, debug_loop)
 
 def run_bot():
     database.setup_database()
