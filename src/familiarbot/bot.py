@@ -15,7 +15,7 @@ from telegram_bot_calendar import DetailedTelegramCalendar
 from timezonefinder import TimezoneFinder
 
 from src.familiarbot import database
-from src.familiarbot.config import GEMINI_KEY, TELEGRAM_KEY, ADMIN_PASS
+from src.familiarbot.config import ADMIN_PASS, GEMINI_KEY, TELEGRAM_KEY
 from src.familiarbot.i18n import get_text
 
 bot = telebot.TeleBot(TELEGRAM_KEY)
@@ -163,7 +163,7 @@ def process_time_step(message, lang):
     try:
         time_obj = datetime.datetime.strptime(message.text.strip(), '%H:%M').time()
         user_states[message.from_user.id]['time'] = time_obj
-        
+
         state = user_states.get(message.from_user.id, {})
         if state.get('update_mode'):
             ask_upd_offset(message.chat.id, message.from_user.id, lang)
@@ -182,12 +182,12 @@ def process_offset_step(message, lang):
         offset_hours = float(message.text.strip())
         user_id = message.from_user.id
         state = user_states.get(user_id, {})
-        
+
         if 'date' in state and 'time' in state:
             due_date = datetime.datetime.combine(state['date'], state['time'])
         else:
             due_date = state['due_date']
-            
+
         remind_at = due_date - datetime.timedelta(hours=offset_hours)
 
         if state.get('update_mode'):
@@ -199,7 +199,7 @@ def process_offset_step(message, lang):
 
         if user_id in user_states:
             del user_states[user_id]
-            
+
     except ValueError:
         msg = bot.reply_to(message, get_text(lang, "invalid_offset"))
         bot.register_next_step_handler(msg, process_offset_step, lang)
@@ -253,12 +253,69 @@ def check_and_send_reminders():
             if not final_text:
                 final_text = get_text(lang, "reminder_sent", title=title, due_date=due_date_str, notes=notes)
 
-            bot.send_message(telegram_id, final_text)
+            markup = InlineKeyboardMarkup()
+            markup.add(InlineKeyboardButton(get_text(lang, "reminder_complete"), callback_data=f"comp_task_{task_id}"))
+            markup.add(InlineKeyboardButton(get_text(lang, "reminder_postpone"), callback_data=f"post_task_{task_id}"))
+            bot.send_message(telegram_id, final_text, reply_markup=markup)
             database.mark_reminder_notified(task_id)
-            database.remove_reminder(task_id) # | expand this later i guess |
 
         except Exception as e:
             print(f"Failed to send reminder to {telegram_id}: {e}")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('comp_task_'))
+def handle_complete_callback(call):
+    task_id = call.data.split('_')[2]
+    lang = database.get_user_language(call.from_user.id)
+
+    database.remove_reminder(task_id)
+
+    bot.answer_callback_query(call.id, text=get_text(lang, "reminder_completed_popup", default="Task completed!"))
+
+    bot.edit_message_text(
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        text=f"{call.message.text}\n\nCompleted!",
+        reply_markup=None
+    )
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('post_task_'))
+def handle_postpone_callback(call):
+    task_id = call.data.split('_')[2]
+    lang = database.get_user_language(call.from_user.id)
+
+    user_states[call.from_user.id] = {'postpone_task_id': task_id, 'msg_to_edit': call.message.message_id}
+
+    msg = bot.send_message(
+        call.message.chat.id,
+        get_text(lang, "ask_postpone_hours", default="How many hours do you want to postpone this task?")
+    )
+    bot.register_next_step_handler(msg, process_postpone_step, lang)
+
+def process_postpone_step(message, lang):
+    if message.text.startswith('/'):
+        bot.reply_to(message, get_text(lang, "cancel_reminder"))
+        return
+    try:
+        offset_hours = float(message.text.strip())
+        user_id = message.from_user.id
+        state = user_states.get(user_id, {})
+        task_id = state.get('postpone_task_id')
+        if not task_id:
+            bot.reply_to(message, "Error: Could not find the task.")
+            return
+        new_remind_at = datetime.datetime.now() + datetime.timedelta(hours=offset_hours)
+        database.postpone_task(task_id, new_remind_at)
+        bot.reply_to(message, get_text(lang, "task_postponed", default=f"Task postponed by {offset_hours} hours."))
+        if 'msg_to_edit' in state:
+            try:
+                bot.edit_message_reply_markup(chat_id=message.chat.id, message_id=state['msg_to_edit'], reply_markup=None)
+            except Exception:
+                pass
+        if user_id in user_states:
+            del user_states[user_id]
+    except ValueError:
+        msg = bot.reply_to(message, get_text(lang, "invalid_offset"))
+        bot.register_next_step_handler(msg, process_postpone_step, lang)
 
 @bot.message_handler(commands=['myreminders'])
 def handle_myreminders(message):
@@ -269,9 +326,7 @@ def handle_myreminders(message):
     if not reminders:
         bot.reply_to(message, get_text(lang, "no_reminders"))
         return
-
     reply_text = get_text(lang, "your_reminders") + "\n\n"
-
     for task_id, title, remind_at, notified in reminders:
         time_str = remind_at.strftime("%Y-%m-%d %H:%M")
         status_key = "status_sent" if notified else "status_pending"
@@ -289,9 +344,7 @@ def handle_removereminder(message):
     if not reminders:
         bot.reply_to(message, get_text(lang, "no_reminders"))
         return
-
     reply_text = get_text(lang, "choose_reminder_to_remove")
-
     markup = InlineKeyboardMarkup()
     for task_id, title, remind_at, notified in reminders:
         time_str = remind_at.strftime("%Y-%m-%d %H:%M")
@@ -319,7 +372,7 @@ def handle_updatereminder(message):
     if not reminders:
         bot.reply_to(message, get_text(lang, "no_reminders"))
         return
-    
+
     reply_text = get_text(lang, "choose_reminder_to_update")
 
     markup = InlineKeyboardMarkup()
@@ -336,7 +389,7 @@ def handle_updatereminder(message):
 def handle_update_callback(call):
     task_id = call.data.split('_')[2]
     lang = database.get_user_language(call.from_user.id)
-    
+
     task_data = database.get_task(task_id)
     if not task_data:
         bot.answer_callback_query(call.id, text=get_text(lang, "error_saving"))
@@ -346,7 +399,7 @@ def handle_update_callback(call):
 
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton(get_text(lang, "btn_skip"), callback_data="skip_upd_title"))
-    
+
     msg = bot.edit_message_text(
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
@@ -367,7 +420,7 @@ def process_upd_title_step(message, lang):
 def handle_skip_upd_title(call):
     lang = database.get_user_language(call.from_user.id)
     bot.clear_step_handler_by_chat_id(call.message.chat.id) # Stops waiting for text
-    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None) 
+    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
     ask_upd_notes(call.message.chat.id, call.from_user.id, lang)
 
 # | NOTES STEP |
@@ -404,7 +457,7 @@ def ask_upd_datetime_choice(chat_id, user_id, lang):
 def handle_do_upd_datetime(call):
     lang = database.get_user_language(call.from_user.id)
     bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
-    
+
     calendar, step = DetailedTelegramCalendar().build()
     bot.send_message(call.message.chat.id, get_text(lang, f"select_{step}"), reply_markup=calendar)
 
@@ -433,7 +486,7 @@ def handle_skip_upd_offset(call):
         return
 
     due_date = state.get('due_date')
-    if 'date' in state and 'time' in state: 
+    if 'date' in state and 'time' in state:
         due_date = datetime.datetime.combine(state['date'], state['time'])
 
     offset_hours = state['offset_hours']
@@ -463,9 +516,9 @@ def debug_loop(message):
     if message.text == "Quit Debug Mode":
         bot.send_message(message.chat.id, "Quit debug mode.", reply_markup=ReplyKeyboardRemove())
         return
-    
+
     result = database.exec_admin_cmd(message.text)
-    msg = bot.send_message(message.chat.id, f"Result:\n\```\n{result}\n```", parse_mode='Markdown')
+    msg = bot.send_message(message.chat.id, f"Result:\n\\```\n{result}\n```", parse_mode='Markdown')
     bot.register_next_step_handler(msg, debug_loop)
 
 def run_bot():

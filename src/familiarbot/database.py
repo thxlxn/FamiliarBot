@@ -220,3 +220,17 @@ def exec_admin_cmd(cmd, params = None):
     finally:
         cur.close()
         conn.close()
+
+def postpone_task(task_id, remind_at):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute('''
+        UPDATE tasks 
+        SET remind_at = %s
+        WHERE id = %s;''', 
+        (remind_at, task_id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
