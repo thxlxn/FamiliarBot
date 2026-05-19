@@ -234,19 +234,3 @@ def postpone_task(task_id, remind_at):
     conn.commit()
     cur.close()
     conn.close()
-
-def get_pending_reminders():
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    cur.execute('''
-        SELECT t.id, u.telegram_id, t.title, t.notes, u.language, t.due_date 
-        FROM tasks t
-        JOIN users u ON t.user_id = u.id
-        WHERE t.remind_at <= (NOW() AT TIME ZONE u.timezone) AND t.notified = TRUE AND t.status = FALSE;
-    ''')
-    reminders = cur.fetchall()
-
-    cur.close()
-    conn.close()
-    return reminders
