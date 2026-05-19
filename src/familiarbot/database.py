@@ -187,7 +187,7 @@ def update_task(task_id, new_title, new_notes, new_due_date, new_offset_hours, n
 
     cur.execute('''
         UPDATE tasks 
-        SET (title, notes, due_date, reminder_offset_hours, remind_at) = (%s, %s, %s, %s, %s) 
+        SET (title, notes, due_date, reminder_offset_hours, remind_at, notified) = (%s, %s, %s, %s, %s, FALSE) 
         WHERE id = %s;''', 
         (new_title, new_notes, new_due_date, new_offset_hours, new_remind_at, task_id))
 
