@@ -4,6 +4,7 @@ import telebot
 from apscheduler.schedulers.background import BackgroundScheduler
 from google import genai
 from google.genai import types
+from loguru import logger
 from telebot.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -22,6 +23,8 @@ bot = telebot.TeleBot(TELEGRAM_KEY)
 user_states = {}
 tf = TimezoneFinder()
 client = genai.Client(api_key=GEMINI_KEY)
+logger.debug("Logger initialized.")
+logger.add("log/bot_errors.log", rotation="200 MB")
 
 @bot.message_handler(commands=['start'])
 def handle_start(message):
@@ -205,7 +208,7 @@ def process_offset_step(message, lang):
         bot.register_next_step_handler(msg, process_offset_step, lang)
     except Exception as e:
         bot.reply_to(message, get_text(lang, "error_saving"))
-        print(f"Error: {e}")
+        logger.error(f"Failed to save reminder for {message.from_user.id}: {e}")
 
 @bot.message_handler(commands=['language', 'lang'])
 def handle_language(message):
@@ -237,7 +240,7 @@ def get_ai_reminder_text(username, title, notes, due_date, lang):
         response = client.models.generate_content(model='gemini-2.5-flash-lite', config=types.GenerateContentConfig(system_instruction=system_prompt), contents=user_prompt)
         return response.text.strip()
     except Exception as e:
-        print(f"AI Generation failed: {e}")
+        logger.error(f"AI Generation failed for {username}: {e}")
         return None
 
 def check_and_send_reminders():
@@ -260,7 +263,7 @@ def check_and_send_reminders():
             database.mark_reminder_notified(task_id)
 
         except Exception as e:
-            print(f"Failed to send reminder to {telegram_id}: {e}")
+            logger.error(f"Failed to send reminder to {telegram_id} (Task {task_id}): {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('comp_task_'))
 def handle_complete_callback(call):

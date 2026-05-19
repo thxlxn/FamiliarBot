@@ -188,7 +188,7 @@ def update_task(task_id, new_title, new_notes, new_due_date, new_offset_hours, n
     cur.execute('''
         UPDATE tasks 
         SET (title, notes, due_date, reminder_offset_hours, remind_at, notified) = (%s, %s, %s, %s, %s, FALSE) 
-        WHERE id = %s;''', 
+        WHERE id = %s;''',
         (new_title, new_notes, new_due_date, new_offset_hours, new_remind_at, task_id))
 
     conn.commit()
@@ -212,11 +212,11 @@ def exec_admin_cmd(cmd, params = None):
         else:
             conn.commit()
             return f"{cur.rowcount} rows affected."
-        
+
     except Exception as e:
         conn.rollback()
         return f"Error: {e}"
-    
+
     finally:
         cur.close()
         conn.close()
@@ -228,9 +228,9 @@ def postpone_task(task_id, remind_at):
     cur.execute('''
         UPDATE tasks 
         SET remind_at = %s, notified = FALSE
-        WHERE id = %s;''', 
+        WHERE id = %s;''',
         (remind_at, task_id))
-    
+
     conn.commit()
     cur.close()
     conn.close()
