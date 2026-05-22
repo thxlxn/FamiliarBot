@@ -1,5 +1,12 @@
 # Telegram Reminder Bot
 
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=flat&logo=postgresql&logoColor=white)
+![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)
+![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
+
+---
+
 ## Overview
 This project is a sophisticated Telegram bot designed for personal task management and automated scheduling. Built with Python, it provides a comprehensive reminder system with support for precise scheduling, timezone awareness, multi-language interfaces, and persistent data storage via PostgreSQL.
 
@@ -88,7 +95,7 @@ Interact with the bot via the following commands in Telegram:
 |-- .gitignore               # Git ignore configuration
 |-- LICENSE                  # Project license
 |-- main.py                  # Application entry point
-|-- pyproject.toml           # Project metadata and dependencies
+|-- pyproject.toml           # Project metadata and Ruff linter configuration
 `-- requirements.txt         # Python dependencies list
 ```
 
@@ -96,6 +103,11 @@ Interact with the bot via the following commands in Telegram:
 
 ## Localization
 Translations are managed via JSON files located in the ```locales/``` directory. To add a new language, create a new ```<iso_code>.json``` file within this directory containing the appropriate key-value pairs matching the project's internal string keys.
+
+---
+
+## Development
+This project uses [Ruff](https://github.com/astral-sh/ruff) for linting and formatting. The configuration is stored in `pyproject.toml`.
 
 ---
 
