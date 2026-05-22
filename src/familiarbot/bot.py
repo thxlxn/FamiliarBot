@@ -29,7 +29,9 @@ logger.init()
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     existing_lang = database.get_user_language(message.from_user.id)
-    lang_code = message.from_user.language_code if existing_lang == 'en' else existing_lang
+    
+    lang_code = existing_lang if existing_lang else message.from_user.language_code
+    
     database.add_user(message.from_user.id, message.from_user.username, lang_code)
 
     reply = get_text(lang_code, "welcome_message")

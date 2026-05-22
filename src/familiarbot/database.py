@@ -64,7 +64,7 @@ def get_user_language(telegram_id):
     result = cur.fetchone()
     cur.close()
     conn.close()
-    return result[0] if result else 'en'
+    return result[0] if result else None
 
 def add_task(telegram_id, title, notes, due_date, offset_hours, remind_at):
     conn = get_db_connection()
