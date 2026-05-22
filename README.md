@@ -24,7 +24,6 @@ This project is a sophisticated Telegram bot designed for personal task manageme
 ### Clone the repository
 ```bash
 git clone https://github.com/thxlxn/FamiliarBot.git
-cd dating-bot
 ```
 
 ### Install dependencies
